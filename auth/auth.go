@@ -57,6 +57,20 @@ func GetToken(w http.ResponseWriter, r *http.Request, conn *pgx.Conn) {
 
 }
 
+// func checkPermission(h http.Handler) http.HandlerFunc {
+// 	return func(w http.ResponseWriter, r *http.Request) {
+// 		authCheck := true
+
+// 		if authCheck {
+
+// 			w.WriteError(w, 400, "error")
+// 			return
+// 		}
+
+// 		h.ServeHttp(w, r)
+// 	}
+// }
+
 func CheckToken(w http.ResponseWriter, r *http.Request) error {
 	tokenString := r.Header.Get("Authorization")
 
@@ -70,8 +84,8 @@ func CheckToken(w http.ResponseWriter, r *http.Request) error {
 	err := verifyToken(tokenString)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
-
 		return errors.New("Invalid Token")
+
 	}
 
 	return nil

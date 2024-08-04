@@ -71,6 +71,7 @@ func main() {
 	var err error
 
 	conn, err = pgx.Connect(context.Background(), "postgres://postgres:mysecretpassword@localhost/db_1?sslmode=disable")
+	//	conn, err = pgx.Connect(context.Background(), "postgres://postgres:sysbitDB@localhost/db_1?sslmode=disable")
 	if err != nil {
 		fmt.Println(err.Error())
 		return
@@ -78,17 +79,32 @@ func main() {
 
 	defer conn.Close(context.Background())
 
-	myRouter := mux.NewRouter().StrictSlash(true)
+	// myRouter := mux.NewRouter().StrictSlash(true)
+	myRouter := mux.NewRouter()
 	myRouter.HandleFunc("/", HomePage)
 	myRouter.HandleFunc("/Token", GetToken).Methods("GET")
-	myRouter.HandleFunc("/InfoApp/{appId}", InfoApp).Methods("GET")
+	myRouter.HandleFunc("/DataApp/{appId}", DataApp).Methods("GET")
 	myRouter.HandleFunc("/UpdProgress/{appId}", UpdProgress).Methods("PUT")
-	myRouter.HandleFunc("/AddApp/{appId}", AddAppId).Methods("POST")
-
+	myRouter.HandleFunc("/RegisterApp/{appId}", RegisterApp).Methods("POST")
+	http.Handle("/", checkPermissions(myRouter))
 	log.Fatal(http.ListenAndServe(":8899", myRouter))
 
 }
 
+func checkPermissions(h http.Handler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		authCheck := true
+
+		if authCheck {
+
+			w.WriteHeader(http.StatusUnauthorized)
+			//w.WriteError(w, 400, "error")
+			return
+		}
+
+		h.ServeHTTP(w, r)
+	}
+}
 func HomePage(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Welcome to the InglesGuru API")
 	fmt.Println("Endpoint Hit: InglesGuru API")
@@ -98,7 +114,7 @@ func GetToken(w http.ResponseWriter, r *http.Request) {
 	auth.GetToken(w, r, conn)
 }
 
-func InfoApp(w http.ResponseWriter, r *http.Request) {
+func DataApp(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
@@ -113,7 +129,7 @@ func InfoApp(w http.ResponseWriter, r *http.Request) {
 	data.InfoApp(w, r, conn, appId)
 }
 
-func AddAppId(w http.ResponseWriter, r *http.Request) {
+func RegisterApp(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	if err := auth.CheckToken(w, r); err != nil {
@@ -124,7 +140,7 @@ func AddAppId(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	appId := vars["appId"]
 
-	data.AddApp(w, r, conn, appId)
+	data.RegisterApp(w, r, conn, appId)
 }
 
 func UpdProgress(w http.ResponseWriter, r *http.Request) {

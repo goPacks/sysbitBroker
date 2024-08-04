@@ -127,7 +127,7 @@ func UpdProgress(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, appId s
 
 // func InsertApps(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, appId string , pin string, deviceOs string, nativ ) {
 // dynamic
-func AddApp(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, appId string) {
+func RegisterApp(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, appId string) {
 
 	type NewAppId struct {
 		Pin         string `json:"pin"`
