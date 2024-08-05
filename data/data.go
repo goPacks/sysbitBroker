@@ -55,7 +55,7 @@ type Progress struct {
 
 // }
 
-func InfoApp(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, appId string) {
+func GetAppInfo(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, appId string) {
 
 	var strNativeLingo, strDeviceOs, strProgress string
 	var bolActive bool
@@ -97,7 +97,7 @@ func InfoApp(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, appId strin
 
 }
 
-func UpdProgress(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, appId string) {
+func UpdAppInfo(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, appId string) {
 
 	lesson := Lesson{}
 	lesson.Lesson = "1"

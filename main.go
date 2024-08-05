@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -79,63 +78,101 @@ func main() {
 
 	defer conn.Close(context.Background())
 
-	// myRouter := mux.NewRouter().StrictSlash(true)
-	myRouter := mux.NewRouter()
-	myRouter.HandleFunc("/", HomePage)
-	myRouter.HandleFunc("/Token", GetToken).Methods("GET")
-	myRouter.HandleFunc("/DataApp/{appId}", DataApp).Methods("GET")
-	myRouter.HandleFunc("/UpdProgress/{appId}", UpdProgress).Methods("PUT")
-	myRouter.HandleFunc("/RegisterApp/{appId}", RegisterApp).Methods("POST")
-	http.Handle("/", checkPermissions(myRouter))
-	log.Fatal(http.ListenAndServe(":8899", myRouter))
+	router := mux.NewRouter()
+
+	// Create a new router without the auth chkToken
+	router.HandleFunc("/token", getToken).Methods("POST")
+	router.HandleFunc("/chkApi", chkApi).Methods("GET")
+
+	//defining authenticated route
+	privateRouter := router.PathPrefix("/").Subrouter()
+	privateRouter.Use(chkToken)
+
+	// Register the routes on the main router with the auth chkToken
+	privateRouter.HandleFunc("/regApp/{appId}", regApp).Methods("POST")
+	privateRouter.HandleFunc("/getAppInfo/{appId}", getAppInfo).Methods("GET")
+	privateRouter.HandleFunc("/updAppInfo/{appId}", updAppInfo).Methods("PUT")
+
+	fmt.Println("Server Listening on port 8899")
+	log.Fatal(http.ListenAndServe(":8899", router))
 
 }
 
-func checkPermissions(h http.Handler) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		authCheck := true
+func chkToken(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// tokenString := r.Header.Get("Authorization")
+		// if tokenString == "" {
+		//     w.WriteHeader(http.StatusUnauthorized)
+		//     return
+		// }
 
-		if authCheck {
+		// tokenString = strings.Replace(tokenString, "Bearer ", "", 1)
 
+		// token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		//     if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+		//         return nil, fmt.Errorf("unexpected signing method")
+		//     }
+		//     return []byte("secret"), nil
+		// })
+
+		// if err != nil {
+		//     w.WriteHeader(http.StatusUnauthorized)
+		//     return
+		// }
+
+		// if !token.Valid {
+		//     w.WriteHeader(http.StatusUnauthorized)
+		//     return
+		// }
+
+		// claims, ok := token.Claims.(jwt.MapClaims)
+		// if !ok {
+		//     w.WriteHeader(http.StatusUnauthorized)
+		//     return
+		// }
+
+		// userID, ok := claims["user_id"].(string)
+		// if !ok {
+		//     w.WriteHeader(http.StatusUnauthorized)
+		//     return
+		// }
+
+		// ctx := context.WithValue(r.Context(), "user_id", userID)
+
+		//authCheck := true
+		err := auth.ChkToken(w, r)
+
+		if err != nil {
 			w.WriteHeader(http.StatusUnauthorized)
-			//w.WriteError(w, 400, "error")
+			w.Write([]byte(err.Error()))
 			return
 		}
 
 		h.ServeHTTP(w, r)
-	}
+	})
 }
-func HomePage(w http.ResponseWriter, r *http.Request) {
+
+func chkApi(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Welcome to the InglesGuru API")
 	fmt.Println("Endpoint Hit: InglesGuru API")
 }
 
-func GetToken(w http.ResponseWriter, r *http.Request) {
+func getToken(w http.ResponseWriter, r *http.Request) {
 	auth.GetToken(w, r, conn)
 }
 
-func DataApp(w http.ResponseWriter, r *http.Request) {
+func getAppInfo(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
-
-	if err := auth.CheckToken(w, r); err != nil {
-		ReturnError(w, err.Error())
-		return
-	}
 
 	vars := mux.Vars(r)
 	appId := vars["appId"]
 
-	data.InfoApp(w, r, conn, appId)
+	data.GetAppInfo(w, r, conn, appId)
 }
 
-func RegisterApp(w http.ResponseWriter, r *http.Request) {
+func regApp(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-
-	if err := auth.CheckToken(w, r); err != nil {
-		ReturnError(w, err.Error())
-		return
-	}
 
 	vars := mux.Vars(r)
 	appId := vars["appId"]
@@ -143,23 +180,18 @@ func RegisterApp(w http.ResponseWriter, r *http.Request) {
 	data.RegisterApp(w, r, conn, appId)
 }
 
-func UpdProgress(w http.ResponseWriter, r *http.Request) {
+func updAppInfo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-
-	if err := auth.CheckToken(w, r); err != nil {
-		ReturnError(w, err.Error())
-		return
-	}
 
 	vars := mux.Vars(r)
 	appId := vars["appId"]
 
-	data.UpdProgress(w, r, conn, appId)
+	data.UpdAppInfo(w, r, conn, appId)
 }
 
-func ReturnError(w http.ResponseWriter, strErr string) {
-	var nokReply NOKReply
-	nokReply.Status = "NOK"
-	nokReply.Errors = strErr
-	json.NewEncoder(w).Encode(nokReply)
-}
+// func ReturnError(w http.ResponseWriter, strErr string) {
+// 	var nokReply NOKReply
+// 	nokReply.Status = "NOK"
+// 	nokReply.Errors = strErr
+// 	json.NewEncoder(w).Encode(nokReply)
+// }

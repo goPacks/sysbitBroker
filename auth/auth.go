@@ -71,11 +71,11 @@ func GetToken(w http.ResponseWriter, r *http.Request, conn *pgx.Conn) {
 // 	}
 // }
 
-func CheckToken(w http.ResponseWriter, r *http.Request) error {
+func ChkToken(w http.ResponseWriter, r *http.Request) error {
 	tokenString := r.Header.Get("Authorization")
 
 	if tokenString == "" {
-		w.WriteHeader(http.StatusUnauthorized)
+		//w.WriteHeader(http.StatusUnauthorized)
 		return errors.New("Missing Authorization Header")
 	}
 
@@ -83,7 +83,7 @@ func CheckToken(w http.ResponseWriter, r *http.Request) error {
 
 	err := verifyToken(tokenString)
 	if err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
+		//w.WriteHeader(http.StatusUnauthorized)
 		return errors.New("Invalid Token")
 
 	}
