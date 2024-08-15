@@ -2,20 +2,17 @@ package data
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
-	"time"
 
 	"github.com/jackc/pgx/v4"
 )
 
-var (
-	dsn string
-	cnt int64
-)
+// var (
+// 	dsn string
+// 	cnt int64
+// )
 
 type OKReply struct {
 	Status  string
@@ -42,25 +39,210 @@ type Progress struct {
 	Done []Lesson `json:"Done"`
 }
 
-// type Done struct {
-// 	Done []Lesson `json:"Done"`
-// }
+// ----------------------------
+type QuizData struct {
+	Quizes []Quiz `json:"quizes"`
+}
 
-// func UpdData(conn *sql.DB) {
+type Selection struct {
+	Choice     string `json:"choice"`
+	Desription string `json:"description"`
+}
 
-// 	// update
-// 	updateStmt := `update "students" set "name"=$1, "roll_number"=$2 where "roll_number"=$3`
-// 	_, e := conn.Exec(updateStmt, "Rachel", 24, 24)
-// 	checkError(e)
+type Quiz struct {
+	Nbr        int         `json:"nbr"`
+	Context    string      `json:"context"`
+	Question   string      `json:"question"`
+	Selections []Selection `json:"selections"`
+	Answer     string      `json:"answer"`
+	Reason     string      `json:"reason"`
+}
 
-// }
+//-----------------------------------------------
+
+type LessonData struct {
+	Pages []Page `json:"pages"`
+}
+
+type Page struct {
+	Nbr   int8   `json:"nbr"`
+	Steps []Step `json:"steps"`
+}
+
+type Step struct {
+	Step  int8   `json:"step"`
+	Img   string `json:"img"`
+	Voice string `json:"voice"`
+	En    string `json:"En"`
+	Id    string `json:"Id"`
+}
+
+//-----------------------------------------------
 
 func GetAppInfo(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, appId string) {
 
 	var strNativeLingo, strDeviceOs, strProgress string
 	var bolActive bool
 
-	if err := conn.QueryRow(context.Background(), "select active, nativeLingo, deviceOs, progress from apps where appId = $1", appId).Scan(&bolActive, &strNativeLingo, &strDeviceOs, &strProgress); err != nil {
+	if err := conn.QueryRow(context.Background(), "select active, nativeLingo, deviceOs, progress from app where appId = $1", appId).Scan(&bolActive, &strNativeLingo, &strDeviceOs, &strProgress); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		var nokReply NOKReply
+		nokReply.Status = "NOK"
+		nokReply.Errors = err.Error()
+		json.NewEncoder(w).Encode(nokReply)
+		return
+	}
+
+	bytProgress := []byte(strProgress)
+	var jsonProgress Progress
+
+	err := json.Unmarshal(bytProgress, &jsonProgress)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+
+	type OKReply struct {
+		Status      string
+		Active      bool
+		NativeLingo string
+		DeviceOs    string
+		Progress    Progress
+	}
+
+	w.WriteHeader(http.StatusOK)
+	var okReply OKReply
+	okReply.Status = "OK"
+	okReply.DeviceOs = strDeviceOs
+	okReply.NativeLingo = strNativeLingo
+	okReply.Active = bolActive
+	okReply.Progress = jsonProgress
+	json.NewEncoder(w).Encode(okReply)
+
+}
+
+func GetLesson(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, lessonId string) {
+
+	var strLessonData string
+
+	if err := conn.QueryRow(context.Background(), "select lessonData from lesson where lessonId = $1", lessonId).Scan(&strLessonData); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		var nokReply NOKReply
+		nokReply.Status = "NOK"
+		nokReply.Errors = err.Error()
+		json.NewEncoder(w).Encode(nokReply)
+		return
+	}
+
+	bytLessonData := []byte(strLessonData)
+	var jsonLessonData LessonData
+
+	err := json.Unmarshal(bytLessonData, &jsonLessonData)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+
+	type OKReply struct {
+		Status     string
+		LessonData LessonData
+	}
+
+	w.WriteHeader(http.StatusOK)
+	var okReply OKReply
+	okReply.Status = "OK"
+	okReply.LessonData = jsonLessonData
+	json.NewEncoder(w).Encode(okReply)
+
+}
+
+func GetQuiz(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, quizId string) {
+
+	var strQuizData string
+
+	if err := conn.QueryRow(context.Background(), "select quizData from quiz where quizId = $1", quizId).Scan(&strQuizData); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		var nokReply NOKReply
+		nokReply.Status = "NOK"
+		nokReply.Errors = err.Error()
+		json.NewEncoder(w).Encode(nokReply)
+		return
+	}
+
+	bytQuizData := []byte(strQuizData)
+	var jsonQuizData QuizData
+
+	err := json.Unmarshal(bytQuizData, &jsonQuizData)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+
+	type OKReply struct {
+		Status   string
+		QuizData QuizData
+	}
+
+	w.WriteHeader(http.StatusOK)
+	var okReply OKReply
+	okReply.Status = "OK"
+	okReply.QuizData = jsonQuizData
+	json.NewEncoder(w).Encode(okReply)
+
+}
+
+func UpdQuiz(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, quizId string) {
+
+	quizData := QuizData{
+		Quizes: []Quiz{},
+	}
+
+	json.NewDecoder(r.Body).Decode(&quizData)
+
+	updAppStmt := "Update quiz set quizData = $1 where quizId = $2"
+
+	_, err := conn.Exec(context.Background(), updAppStmt, quizData, quizId)
+
+	if checkError(w, err) {
+		return
+	}
+
+	var okReply OKReply
+	okReply.Status = "OK"
+	okReply.Message = "Quiz Updated"
+	json.NewEncoder(w).Encode(okReply)
+
+}
+
+func UpdLesson(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, lessonId string) {
+
+	lessonData := LessonData{
+		Pages: []Page{},
+	}
+
+	json.NewDecoder(r.Body).Decode(&lessonData)
+
+	updAppStmt := "Update lesson set lessonData = $1 where lessonId = $2"
+
+	_, err := conn.Exec(context.Background(), updAppStmt, lessonData, lessonId)
+
+	if checkError(w, err) {
+		return
+	}
+
+	var okReply OKReply
+	okReply.Status = "OK"
+	okReply.Message = "Lesson Updated"
+	json.NewEncoder(w).Encode(okReply)
+
+}
+
+func GetConv(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, appId string) {
+
+	var strNativeLingo, strDeviceOs, strProgress string
+	var bolActive bool
+
+	if err := conn.QueryRow(context.Background(), "select active, nativeLingo, deviceOs, progress from app where appId = $1", appId).Scan(&bolActive, &strNativeLingo, &strDeviceOs, &strProgress); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		var nokReply NOKReply
 		nokReply.Status = "NOK"
@@ -104,13 +286,15 @@ func UpdAppInfo(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, appId st
 	lesson.Page = "1"
 	lesson.Page = "0%"
 
+	fmt.Println(appId)
+
 	progress := Progress{
 		Done: []Lesson{},
 	}
 
 	json.NewDecoder(r.Body).Decode(&progress)
 
-	updAppStmt := "Update apps set progress = $1 where appId = $2"
+	updAppStmt := "Update app set progress = $1 where appId = $2"
 
 	_, err := conn.Exec(context.Background(), updAppStmt, progress, appId)
 
@@ -125,12 +309,10 @@ func UpdAppInfo(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, appId st
 
 }
 
-// func InsertApps(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, appId string , pin string, deviceOs string, nativ ) {
-// dynamic
 func RegisterApp(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, appId string) {
 
 	type NewAppId struct {
-		Pin         string `json:"pin"`
+		Email       string `json:"email"`
 		DeviceOs    string `json:"deviceOs"`
 		NativeLingo string `json:"nativeLingo"`
 	}
@@ -148,9 +330,9 @@ func RegisterApp(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, appId s
 
 	json.NewDecoder(r.Body).Decode(&a)
 
-	insAppStmt := "insert into apps (appId, pin, active, deviceOs, nativeLingo, progress) values($1, $2, $3, $4, $5, $6)"
+	insAppStmt := "insert into app (appId, email, active, deviceOs, nativeLingo, progress) values($1, $2, $3, $4, $5, $6)"
 
-	_, err := conn.Exec(context.Background(), insAppStmt, appId, a.Pin, "1", a.DeviceOs, a.NativeLingo, progress)
+	_, err := conn.Exec(context.Background(), insAppStmt, appId, a.Email, "1", a.DeviceOs, a.NativeLingo, progress)
 
 	if checkError(w, err) {
 		return
@@ -163,22 +345,7 @@ func RegisterApp(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, appId s
 
 }
 
-// func ListData(conn *sql.DB) {
-// 	rows, err := conn.Query(`SELECT "name", "roll_number" FROM "students"`)
-// 	checkError(err)
-
-// 	defer rows.Close()
-// 	for rows.Next() {
-// 		var name string
-// 		var roll_number int
-
-// 		err = rows.Scan(&name, &roll_number)
-// 		checkError(err)
-
-// 		fmt.Println(name, roll_number)
-// 	}
-
-// }
+// Generic Error Function
 
 func checkError(w http.ResponseWriter, err error) bool {
 	if err != nil {
@@ -190,51 +357,4 @@ func checkError(w http.ResponseWriter, err error) bool {
 	} else {
 		return false
 	}
-}
-
-func openDB() (*sql.DB, error) {
-
-	connStr := "postgres://postgres:mysecretpassword@localhost/db_1?sslmode=disable"
-
-	// Connect to database
-	db, err := sql.Open("postgres", connStr)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	//defer db.Close()
-
-	err = db.Ping()
-	if err != nil {
-		return nil, err
-	}
-
-	return db, nil
-
-}
-
-func ConnectToDB() *sql.DB {
-	//dsn := os.Getenv("DSN")
-
-	for {
-		connection, err := openDB()
-
-		if err != nil {
-			log.Println("Postgress not yet ready...")
-			cnt++
-		} else {
-			log.Println("Connected to Postgres!")
-			return connection
-		}
-
-		if cnt > 10 {
-			log.Println(err)
-			return nil
-		}
-
-		log.Println("Backing off for 2 seconds...")
-		time.Sleep(2 * time.Second)
-		continue
-	}
-
 }

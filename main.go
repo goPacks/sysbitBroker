@@ -13,11 +13,6 @@ import (
 	_ "github.com/lib/pq"
 )
 
-var (
-	dsn = ""
-	cnt int64
-)
-
 type AppId struct {
 	AppId    string `json:"appid"`
 	Password string `json:"password"`
@@ -51,26 +46,18 @@ type NOKReply struct {
 }
 
 var (
-	progress Progress
-	conn     *pgx.Conn
+	conn *pgx.Conn
+	err  error
 )
 
-// const (
-// 	host     = "localhost"
-// 	port     = 5400
-// 	user     = "postgres"
-// 	password = "mysecretpassword"
-// 	dbname   = "db_1"
-// )
-
-//connStr := "postgres://postgres:mysecretpassword@localhost/db_1?sslmode=disable"
+const (
+	connStr = "postgres://postgres:mysecretpassword@143.198.198.51:5432/inglesapp?sslmode=disable"
+)
 
 func main() {
 
-	var err error
+	conn, err = pgx.Connect(context.Background(), connStr)
 
-	conn, err = pgx.Connect(context.Background(), "postgres://postgres:mysecretpassword@localhost/db_1?sslmode=disable")
-	//	conn, err = pgx.Connect(context.Background(), "postgres://postgres:sysbitDB@localhost/db_1?sslmode=disable")
 	if err != nil {
 		fmt.Println(err.Error())
 		return
@@ -78,69 +65,53 @@ func main() {
 
 	defer conn.Close(context.Background())
 
+	// Create a Router without the Token Authenitcation
 	router := mux.NewRouter()
-
-	// Create a new router without the auth chkToken
-	router.HandleFunc("/token", getToken).Methods("POST")
+	router.HandleFunc("/AppToken", getAppToken).Methods("POST")
+	router.HandleFunc("/AdminToken", getAdminToken).Methods("POST")
 	router.HandleFunc("/chkApi", chkApi).Methods("GET")
 
+	// Create Admin subRouter with Token Authentication
+	adminRouter := router.PathPrefix("/").Subrouter()
+	adminRouter.Use(chkAdminToken)
+	adminRouter.HandleFunc("/getQuiz/{quizId}", getQuiz).Methods("GET")
+	adminRouter.HandleFunc("/updQuiz/{quizId}", updQuiz).Methods("PUT")
+	adminRouter.HandleFunc("/getLesson/{lessonId}", getLesson).Methods("GET")
+	adminRouter.HandleFunc("/updLesson/{lessonId}", updLesson).Methods("PUT")
+
 	//defining authenticated route
-	privateRouter := router.PathPrefix("/").Subrouter()
-	privateRouter.Use(chkToken)
+	appRouter := router.PathPrefix("/").Subrouter()
+	appRouter.Use(chkAppToken)
 
 	// Register the routes on the main router with the auth chkToken
-	privateRouter.HandleFunc("/regApp/{appId}", regApp).Methods("POST")
-	privateRouter.HandleFunc("/getAppInfo/{appId}", getAppInfo).Methods("GET")
-	privateRouter.HandleFunc("/updAppInfo/{appId}", updAppInfo).Methods("PUT")
+	appRouter.HandleFunc("/regApp/{appId}", regApp).Methods("POST")
+	appRouter.HandleFunc("/getAppInfo/{appId}", getAppInfo).Methods("GET")
+	appRouter.HandleFunc("/updAppInfo/{appId}", updAppInfo).Methods("PUT")
 
 	fmt.Println("Server Listening on port 8899")
 	log.Fatal(http.ListenAndServe(":8899", router))
 
 }
 
-func chkToken(h http.Handler) http.Handler {
+func chkAppToken(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// tokenString := r.Header.Get("Authorization")
-		// if tokenString == "" {
-		//     w.WriteHeader(http.StatusUnauthorized)
-		//     return
-		// }
 
-		// tokenString = strings.Replace(tokenString, "Bearer ", "", 1)
+		err := auth.ChkAppToken(w, r)
 
-		// token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		//     if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-		//         return nil, fmt.Errorf("unexpected signing method")
-		//     }
-		//     return []byte("secret"), nil
-		// })
+		if err != nil {
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte(err.Error()))
+			return
+		}
 
-		// if err != nil {
-		//     w.WriteHeader(http.StatusUnauthorized)
-		//     return
-		// }
+		h.ServeHTTP(w, r)
+	})
+}
 
-		// if !token.Valid {
-		//     w.WriteHeader(http.StatusUnauthorized)
-		//     return
-		// }
+func chkAdminToken(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
-		// claims, ok := token.Claims.(jwt.MapClaims)
-		// if !ok {
-		//     w.WriteHeader(http.StatusUnauthorized)
-		//     return
-		// }
-
-		// userID, ok := claims["user_id"].(string)
-		// if !ok {
-		//     w.WriteHeader(http.StatusUnauthorized)
-		//     return
-		// }
-
-		// ctx := context.WithValue(r.Context(), "user_id", userID)
-
-		//authCheck := true
-		err := auth.ChkToken(w, r)
+		err := auth.ChkAdminToken(w, r)
 
 		if err != nil {
 			w.WriteHeader(http.StatusUnauthorized)
@@ -157,8 +128,62 @@ func chkApi(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Endpoint Hit: InglesGuru API")
 }
 
-func getToken(w http.ResponseWriter, r *http.Request) {
-	auth.GetToken(w, r, conn)
+func getAppToken(w http.ResponseWriter, r *http.Request) {
+	auth.GetAppToken(w, r, conn)
+}
+
+func getAdminToken(w http.ResponseWriter, r *http.Request) {
+	auth.GetAdminToken(w, r, conn)
+}
+
+func getConv(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/json")
+
+	vars := mux.Vars(r)
+	lessonId := vars["alessonId"]
+
+	data.GetConv(w, r, conn, lessonId)
+}
+
+func getQuiz(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/json")
+
+	vars := mux.Vars(r)
+	quizId := vars["quizId"]
+
+	data.GetQuiz(w, r, conn, quizId)
+}
+
+func getLesson(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/json")
+
+	vars := mux.Vars(r)
+	lessonId := vars["lessonId"]
+
+	data.GetLesson(w, r, conn, lessonId)
+}
+
+func updQuiz(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/json")
+
+	vars := mux.Vars(r)
+	quizId := vars["quizId"]
+
+	data.UpdQuiz(w, r, conn, quizId)
+}
+
+func updLesson(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/json")
+
+	vars := mux.Vars(r)
+	lessonId := vars["lessonId"]
+
+	data.UpdLesson(w, r, conn, lessonId)
 }
 
 func getAppInfo(w http.ResponseWriter, r *http.Request) {
@@ -167,6 +192,8 @@ func getAppInfo(w http.ResponseWriter, r *http.Request) {
 
 	vars := mux.Vars(r)
 	appId := vars["appId"]
+
+	fmt.Println("Here")
 
 	data.GetAppInfo(w, r, conn, appId)
 }
@@ -188,10 +215,3 @@ func updAppInfo(w http.ResponseWriter, r *http.Request) {
 
 	data.UpdAppInfo(w, r, conn, appId)
 }
-
-// func ReturnError(w http.ResponseWriter, strErr string) {
-// 	var nokReply NOKReply
-// 	nokReply.Status = "NOK"
-// 	nokReply.Errors = strErr
-// 	json.NewEncoder(w).Encode(nokReply)
-// }
