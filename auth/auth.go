@@ -21,7 +21,7 @@ var (
 )
 
 type AppId struct {
-	AppId string `json:"appid"`
+	AppId string `json:"appId"`
 	Pin   string `json:"pin"`
 }
 

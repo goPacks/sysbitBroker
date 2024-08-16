@@ -193,8 +193,6 @@ func getAppInfo(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	appId := vars["appId"]
 
-	fmt.Println("Here")
-
 	data.GetAppInfo(w, r, conn, appId)
 }
 

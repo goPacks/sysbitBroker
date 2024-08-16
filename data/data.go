@@ -70,11 +70,9 @@ type Page struct {
 }
 
 type Step struct {
-	Step  int8   `json:"step"`
-	Img   string `json:"img"`
-	Voice string `json:"voice"`
-	En    string `json:"En"`
-	Id    string `json:"Id"`
+	Step int8   `json:"step"`
+	En   string `json:"En"`
+	Id   string `json:"Id"`
 }
 
 //-----------------------------------------------
@@ -285,8 +283,6 @@ func UpdAppInfo(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, appId st
 	lesson.Lesson = "1"
 	lesson.Page = "1"
 	lesson.Page = "0%"
-
-	fmt.Println(appId)
 
 	progress := Progress{
 		Done: []Lesson{},
