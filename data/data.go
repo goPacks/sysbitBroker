@@ -35,6 +35,12 @@ type Lesson struct {
 	Result string `json:"Result"`
 }
 
+type LessonHeader struct {
+	LessonId string `json:"lessonId"`
+	Title    string `json:"title"`
+	Cover    string `json:"cover"`
+}
+
 type Progress struct {
 	Done []Lesson `json:"Done"`
 }
@@ -58,7 +64,10 @@ type Quiz struct {
 	Reason     string      `json:"reason"`
 }
 
-//-----------------------------------------------
+// -----------------------------------------------
+// type LessonHeaders struct {
+// 	LessonHeader []LessonHeader
+// }
 
 type LessonData struct {
 	Pages []Page `json:"pages"`
@@ -150,6 +159,72 @@ func GetLesson(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, lessonId 
 	var okReply OKReply
 	okReply.Status = "OK"
 	okReply.LessonData = jsonLessonData
+	json.NewEncoder(w).Encode(okReply)
+
+}
+
+func GetLessonHeaders(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, moduleId string) {
+
+	var strLessonId string
+	var strTitle string
+	var strCover string
+
+	// 	rows, err := conn.Query("SELECT ename, sal FROM emp order by sal desc")
+	//    if err != nil {
+	//             panic(err)
+	//    }
+
+	rows, err := conn.Query(context.Background(), "select lessonId, title, cover from lesson where moduleId  = $1 order by lessonId", moduleId)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		var nokReply NOKReply
+		nokReply.Status = "NOK"
+		nokReply.Errors = err.Error()
+		json.NewEncoder(w).Encode(nokReply)
+		return
+	}
+
+	defer rows.Close()
+
+	lessonHeaders := []LessonHeader{}
+
+	for rows.Next() {
+
+		if err := rows.Scan(&strLessonId, &strTitle, &strCover); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			var nokReply NOKReply
+			nokReply.Status = "NOK"
+			nokReply.Errors = err.Error()
+			json.NewEncoder(w).Encode(nokReply)
+			return
+		}
+
+		lessonHeader := LessonHeader{}
+		lessonHeader.LessonId = strLessonId
+		lessonHeader.Cover = strCover
+		lessonHeader.Title = strTitle
+		lessonHeaders = append(lessonHeaders, lessonHeader)
+
+	}
+
+	// bytLessonHeaders := []byte(strLessonHeaders)
+	// var jsonLessonHeaders LessonHeaders
+
+	// err := json.Unmarshal(bytLessonHeaders, &lessonHeaders)
+	// if err != nil {
+	// 	fmt.Println("Error:", err)
+	// 	return
+	// }
+
+	type OKReply struct {
+		Status        string
+		LessonHeaders []LessonHeader
+	}
+
+	w.WriteHeader(http.StatusOK)
+	var okReply OKReply
+	okReply.Status = "OK"
+	okReply.LessonHeaders = lessonHeaders
 	json.NewEncoder(w).Encode(okReply)
 
 }

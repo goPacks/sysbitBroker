@@ -78,6 +78,7 @@ func main() {
 	adminRouter.HandleFunc("/updQuiz/{quizId}", updQuiz).Methods("PUT")
 	adminRouter.HandleFunc("/getLesson/{lessonId}", getLesson).Methods("GET")
 	adminRouter.HandleFunc("/updLesson/{lessonId}", updLesson).Methods("PUT")
+	adminRouter.HandleFunc("/getLessonHeaders/{moduleId}", getLessonHeaders).Methods("GET")
 
 	//defining authenticated route
 	appRouter := router.PathPrefix("/").Subrouter()
@@ -164,6 +165,16 @@ func getLesson(w http.ResponseWriter, r *http.Request) {
 	lessonId := vars["lessonId"]
 
 	data.GetLesson(w, r, conn, lessonId)
+}
+
+func getLessonHeaders(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/json")
+
+	vars := mux.Vars(r)
+	moduleId := vars["moduleId"]
+
+	data.GetLessonHeaders(w, r, conn, moduleId)
 }
 
 func updQuiz(w http.ResponseWriter, r *http.Request) {
