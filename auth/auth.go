@@ -3,18 +3,16 @@ package auth
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
+
 	"net/http"
 	"time"
 
 	"github.com/golang-jwt/jwt"
-	"github.com/gorilla/mux"
 	"github.com/jackc/pgx/v4"
 	_ "github.com/lib/pq"
 )
 
-const adminTokenSecret = "Hello, 世界"
+const adminTokenSecret = "Hello, Sysbit"
 
 var (
 	secretKey = []byte("secret-key")
@@ -22,7 +20,7 @@ var (
 
 type AppId struct {
 	AppId string `json:"appId"`
-	Pin   string `json:"pin"`
+	Email string `json:"email"`
 }
 
 type Login struct {
@@ -48,7 +46,32 @@ func GetAppToken(w http.ResponseWriter, r *http.Request, conn *pgx.Conn) {
 
 	json.NewDecoder(r.Body).Decode(&a)
 
-	tokenString, err := createToken(a.AppId)
+	pmtLevel := 0
+	active := false
+	nativeLingo := ""
+	deviceOs := ""
+
+	if err := conn.QueryRow(context.Background(), "select pmtLevel, active, nativeLingo, deviceOs from app where appId = $1 and email = $2", a.AppId, a.Email).Scan(&pmtLevel, &active, &nativeLingo, &deviceOs); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		var nokReply NOKReply
+		nokReply.Status = "NOK"
+		nokReply.Errors = err.Error()
+		json.NewEncoder(w).Encode(nokReply)
+		return
+	}
+
+	claims := jwt.MapClaims{
+		"tokenType":    "app",
+		"appId":        a.AppId,
+		"email":        a.Email,
+		"pmtLevel":     pmtLevel,
+		"active":       active,
+		"nartiveLingo": nativeLingo,
+		"deviceOs":     deviceOs,
+		"exp":          time.Now().Add(time.Hour * 24).Unix(),
+	}
+
+	tokenString, err := createToken(claims)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		var nokReply NOKReply
@@ -76,9 +99,9 @@ func GetAdminToken(w http.ResponseWriter, r *http.Request, conn *pgx.Conn) {
 
 	name := ""
 	email := ""
-	roleGroupId := ""
+	roleCode := ""
 
-	if err := conn.QueryRow(context.Background(), "select name, roleGroupId, email from login where loginId = $1 and pswd = $2", a.UserId, a.Pswd).Scan(&name, &roleGroupId, &email); err != nil {
+	if err := conn.QueryRow(context.Background(), "select name, roleCode, email from login where loginCode = $1 and pswd = $2", a.UserId, a.Pswd).Scan(&name, &roleCode, &email); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		var nokReply NOKReply
 		nokReply.Status = "NOK"
@@ -87,7 +110,15 @@ func GetAdminToken(w http.ResponseWriter, r *http.Request, conn *pgx.Conn) {
 		return
 	}
 
-	tokenString, err := createToken(adminTokenSecret)
+	claims := jwt.MapClaims{
+		"tokenType": "admin",
+		"name":      name,
+		"roleCode":  roleCode,
+		"email":     email,
+		"exp":       time.Now().Add(time.Hour * 24).Unix(),
+	}
+
+	tokenString, err := createToken(claims)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		var nokReply NOKReply
@@ -105,57 +136,59 @@ func GetAdminToken(w http.ResponseWriter, r *http.Request, conn *pgx.Conn) {
 
 }
 
-func ChkAppToken(w http.ResponseWriter, r *http.Request) error {
-	tokenString := r.Header.Get("Authorization")
+// func ChkAppToken(h http.Handler, w http.ResponseWriter, r *http.Request) error {
+// 	tokenString := r.Header.Get("Authorization")
 
-	if tokenString == "" {
-		//w.WriteHeader(http.StatusUnauthorized)
-		return errors.New("Missing Authorization Header")
-	}
+// 	if tokenString == "" {
+// 		//w.WriteHeader(http.StatusUnauthorized)
+// 		return errors.New("Missing Authorization Header")
+// 	}
 
-	tokenString = tokenString[len("Bearer "):]
+// 	tokenString = tokenString[len("Bearer "):]
 
-	vars := mux.Vars(r)
-	appId := vars["appId"]
+// 	// vars := mux.Vars(r)
+// 	// appId := vars["appId"]
 
-	err := verifyToken(tokenString, appId)
-	if err != nil {
-		//w.WriteHeader(http.StatusUnauthorized)
-		//return errors.New("Invalid Token")
-		return err
+// 	err := verifyToken(tokenString, r)
+// 	if err != nil {
+// 		//w.WriteHeader(http.StatusUnauthorized)
+// 		//return errors.New("Invalid Token")
+// 		return err
 
-	}
+// 	}
 
-	return nil
-}
+// 	return nil
+// }
 
-func ChkAdminToken(w http.ResponseWriter, r *http.Request) error {
-	tokenString := r.Header.Get("Authorization")
+// func ChkAdminToken(w http.ResponseWriter, r *http.Request) error {
+// 	tokenString := r.Header.Get("Authorization")
 
-	if tokenString == "" {
-		//w.WriteHeader(http.StatusUnauthorized)
-		return errors.New("Missing Authorization Header")
-	}
+// 	if tokenString == "" {
+// 		//w.WriteHeader(http.StatusUnauthorized)
+// 		return errors.New("Missing Authorization Header")
+// 	}
 
-	tokenString = tokenString[len("Bearer "):]
+// 	tokenString = tokenString[len("Bearer "):]
 
-	err := verifyToken(tokenString, adminTokenSecret)
-	if err != nil {
-		//w.WriteHeader(http.StatusUnauthorized)
-		//return errors.New("Invalid Token")
-		return err
+// 	err := verifyToken(tokenString, r)
+// 	if err != nil {
+// 		//w.WriteHeader(http.StatusUnauthorized)
+// 		//return errors.New("Invalid Token")
+// 		return err
 
-	}
+// 	}
 
-	return nil
-}
+// 	return nil
+// }
 
-func createToken(appId string) (string, error) {
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256,
-		jwt.MapClaims{
-			"appId": appId,
-			"exp":   time.Now().Add(time.Hour * 24).Unix(),
-		})
+func createToken(claims jwt.MapClaims) (string, error) {
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	// jwt.MapClaims{
+	// 	"appId": appId,
+	// 	"exp":   time.Now().Add(time.Hour * 24).Unix(),
+	// }
+	//claims
+
 	tokenString, err := token.SignedString(secretKey)
 	if err != nil {
 		return "", nil
@@ -163,25 +196,45 @@ func createToken(appId string) (string, error) {
 	return tokenString, nil
 }
 
-func verifyToken(tokenString string, appId string) error {
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		return secretKey, nil
-	})
-	if err != nil {
-		return err
-	}
-	if !token.Valid {
-		return fmt.Errorf("Invalid Token")
-	}
+// func verifyToken(tokenString string, r *http.Request) error {
+// 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+// 		return secretKey, nil
+// 	})
+// 	if err != nil {
+// 		return err
+// 	}
+// 	if !token.Valid {
+// 		return fmt.Errorf("invalid token")
+// 	}
 
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
-		return fmt.Errorf("Unable to extract claims")
-	}
+// 	claims, ok := token.Claims.(jwt.MapClaims)
+// 	if !ok {
+// 		return fmt.Errorf("Unable to extract claims")
+// 	}
 
-	if claims["appId"].(string) != appId {
-		return fmt.Errorf("Token does not match appID")
-	}
+// 	// if claims["appId"].(string) != appId {
+// 	// 	return fmt.Errorf("Token does not match appID")
+// 	// }
 
-	return nil
-}
+// 	//fmt.Println(claims["appId"].(string))
+
+// 	//r = r.WithContext(SetJWTClaimsContext(r.Context(), claims))
+
+// 	//newCtx := context.WithValue(r.Context(), "userId", "userId")
+
+// 	r.Header.Add("AppId", claims["appId"].(string))
+
+// 	//r = r.WithContext(newCtx)
+
+// 	return nil
+// }
+
+// type claimskey int
+
+// var claimsKey claimskey
+
+// func SetJWTClaimsContext(ctx context.Context, claims jwt.MapClaims) context.Context {
+
+// 	claimsKey = 1
+// 	return context.WithValue(ctx, claimsKey, claims)
+// }

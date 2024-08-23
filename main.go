@@ -5,12 +5,21 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"sysbitBroker/auth"
 	"sysbitBroker/data"
 
+	"encoding/json"
+	"errors"
+
+	"github.com/golang-jwt/jwt"
 	"github.com/gorilla/mux"
 	"github.com/jackc/pgx/v4"
 	_ "github.com/lib/pq"
+)
+
+var (
+	secretKey = []byte("secret-key")
 )
 
 type AppId struct {
@@ -70,59 +79,71 @@ func main() {
 	router.HandleFunc("/AppToken", getAppToken).Methods("POST")
 	router.HandleFunc("/AdminToken", getAdminToken).Methods("POST")
 	router.HandleFunc("/chkApi", chkApi).Methods("GET")
+	router.HandleFunc("/regApp", regApp).Methods("POST")
+
+	tokenRouter := router.PathPrefix("/").Subrouter()
+	tokenRouter.Use(chkToken)
+	tokenRouter.HandleFunc("/getHeaders/{modCode}", getHeaders).Methods("GET")
+	tokenRouter.HandleFunc("/getQuiz/{quizCode}", getQuiz).Methods("GET")
+	tokenRouter.HandleFunc("/updQuiz/{quizCode}", updQuiz).Methods("PUT")
+	tokenRouter.HandleFunc("/getLesson/{lessonCode}", getLesson).Methods("GET")
+	tokenRouter.HandleFunc("/updLesson/{lessonCode}", updLesson).Methods("PUT")
+	tokenRouter.HandleFunc("/regApp", regApp).Methods("POST")
+	tokenRouter.HandleFunc("/getAppProgress", getAppProgress).Methods("GET")
+	tokenRouter.HandleFunc("/updAppProgress", updAppProgress).Methods("PUT")
 
 	// Create Admin subRouter with Token Authentication
-	adminRouter := router.PathPrefix("/").Subrouter()
-	adminRouter.Use(chkAdminToken)
-	adminRouter.HandleFunc("/getQuiz/{quizId}", getQuiz).Methods("GET")
-	adminRouter.HandleFunc("/updQuiz/{quizId}", updQuiz).Methods("PUT")
-	adminRouter.HandleFunc("/getLesson/{lessonId}", getLesson).Methods("GET")
-	adminRouter.HandleFunc("/updLesson/{lessonId}", updLesson).Methods("PUT")
-	adminRouter.HandleFunc("/getLessonHeaders/{moduleId}", getLessonHeaders).Methods("GET")
+	// adminRouter := router.PathPrefix("/").Subrouter()
+	// adminRouter.Use(chkAdminToken)
+	// adminRouter.HandleFunc("/getQuiz/{quizId}", getQuiz).Methods("GET")
+	// adminRouter.HandleFunc("/updQuiz/{quizId}", updQuiz).Methods("PUT")
+	// adminRouter.HandleFunc("/getLesson/{lessonId}", getLesson).Methods("GET")
+	// adminRouter.HandleFunc("/updLesson/{lessonId}", updLesson).Methods("PUT")
+	// //	adminRouter.HandleFunc("/AdminLessonHeaders/{moduleCode}", getLessonHeaders).Methods("GET")
 
-	//defining authenticated route
-	appRouter := router.PathPrefix("/").Subrouter()
-	appRouter.Use(chkAppToken)
-
-	// Register the routes on the main router with the auth chkToken
-	appRouter.HandleFunc("/regApp/{appId}", regApp).Methods("POST")
-	appRouter.HandleFunc("/getAppInfo/{appId}", getAppInfo).Methods("GET")
-	appRouter.HandleFunc("/updAppInfo/{appId}", updAppInfo).Methods("PUT")
+	// //defining authenticated route
+	// appRouter := router.PathPrefix("/").Subrouter()
+	// appRouter.Use(chkAppToken)
+	// // Register the routes on the main router with the auth chkToken
+	// appRouter.HandleFunc("/regApp", regApp).Methods("POST")
+	// appRouter.HandleFunc("/getAppInfo", getAppInfo).Methods("GET")
+	// appRouter.HandleFunc("/updAppInfo", updAppInfo).Methods("PUT")
+	// //	appRouter.HandleFunc("/AppLessonHeaders/{moduleCode}", getLessonHeaders).Methods("GET")
 
 	fmt.Println("Server Listening on port 8899")
 	log.Fatal(http.ListenAndServe(":8899", router))
 
 }
 
-func chkAppToken(h http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// func chkAppToken(h http.Handler) http.Handler {
+// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
-		err := auth.ChkAppToken(w, r)
+// 		err := auth.ChkAppToken(h, w, r)
 
-		if err != nil {
-			w.WriteHeader(http.StatusUnauthorized)
-			w.Write([]byte(err.Error()))
-			return
-		}
+// 		if err != nil {
+// 			w.WriteHeader(http.StatusUnauthorized)
+// 			w.Write([]byte(err.Error()))
+// 			return
+// 		}
 
-		h.ServeHTTP(w, r)
-	})
-}
+// 		h.ServeHTTP(w, r)
+// 	})
+// }
 
-func chkAdminToken(h http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// func chkAdminToken(h http.Handler) http.Handler {
+// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
-		err := auth.ChkAdminToken(w, r)
+// 		err := auth.ChkAdminToken(w, r)
 
-		if err != nil {
-			w.WriteHeader(http.StatusUnauthorized)
-			w.Write([]byte(err.Error()))
-			return
-		}
+// 		if err != nil {
+// 			w.WriteHeader(http.StatusUnauthorized)
+// 			w.Write([]byte(err.Error()))
+// 			return
+// 		}
 
-		h.ServeHTTP(w, r)
-	})
-}
+// 		h.ServeHTTP(w, r)
+// 	})
+// }
 
 func chkApi(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Welcome to the InglesGuru API")
@@ -152,9 +173,9 @@ func getQuiz(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	vars := mux.Vars(r)
-	quizId := vars["quizId"]
+	quizCode := vars["quizCode"]
 
-	data.GetQuiz(w, r, conn, quizId)
+	data.GetQuiz(w, r, conn, quizCode)
 }
 
 func getLesson(w http.ResponseWriter, r *http.Request) {
@@ -162,19 +183,19 @@ func getLesson(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	vars := mux.Vars(r)
-	lessonId := vars["lessonId"]
+	lessonCode := vars["lessonCode"]
 
-	data.GetLesson(w, r, conn, lessonId)
+	data.GetLesson(w, r, conn, lessonCode)
 }
 
-func getLessonHeaders(w http.ResponseWriter, r *http.Request) {
+func getHeaders(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
 	vars := mux.Vars(r)
-	moduleId := vars["moduleId"]
+	modCode := vars["modCode"]
 
-	data.GetLessonHeaders(w, r, conn, moduleId)
+	data.GetHeaders(w, r, conn, modCode)
 }
 
 func updQuiz(w http.ResponseWriter, r *http.Request) {
@@ -182,9 +203,9 @@ func updQuiz(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	vars := mux.Vars(r)
-	quizId := vars["quizId"]
+	quizCode := vars["quizCode"]
 
-	data.UpdQuiz(w, r, conn, quizId)
+	data.UpdQuiz(w, r, conn, quizCode)
 }
 
 func updLesson(w http.ResponseWriter, r *http.Request) {
@@ -192,35 +213,201 @@ func updLesson(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	vars := mux.Vars(r)
-	lessonId := vars["lessonId"]
+	lessonCode := vars["lessonCode"]
 
-	data.UpdLesson(w, r, conn, lessonId)
+	data.UpdLesson(w, r, conn, lessonCode)
 }
 
-func getAppInfo(w http.ResponseWriter, r *http.Request) {
+func getAppProgress(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
-	vars := mux.Vars(r)
-	appId := vars["appId"]
+	// vars := mux.Vars(r)
+	// appId := vars["appId"]
 
-	data.GetAppInfo(w, r, conn, appId)
+	data.GetAppProgress(w, r, conn)
 }
 
 func regApp(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	vars := mux.Vars(r)
-	appId := vars["appId"]
-
-	data.RegisterApp(w, r, conn, appId)
+	data.RegisterApp(w, r, conn)
 }
 
-func updAppInfo(w http.ResponseWriter, r *http.Request) {
+func updAppProgress(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	vars := mux.Vars(r)
-	appId := vars["appId"]
+	data.UpdAppProgress(w, r, conn)
+}
 
-	data.UpdAppInfo(w, r, conn, appId)
+// func chkAppToken(next http.Handler) http.Handler {
+// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// 		tokenString := r.Header.Get("Authorization")
+// 		if tokenString == "" {
+// 			w.WriteHeader(http.StatusUnauthorized)
+// 			return
+// 		}
+
+// 		tokenString = strings.Replace(tokenString, "Bearer ", "", 1)
+
+// 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+// 			return secretKey, nil
+// 		})
+
+// 		if err != nil {
+// 			w.WriteHeader(http.StatusUnauthorized)
+// 			return
+// 		}
+
+// 		if !token.Valid {
+// 			w.WriteHeader(http.StatusUnauthorized)
+// 			return
+// 		}
+
+// 		claims, ok := token.Claims.(jwt.MapClaims)
+// 		if !ok {
+// 			w.WriteHeader(http.StatusUnauthorized)
+// 			return
+// 		}
+
+// 		appId, ok := claims["appId"].(string)
+// 		if !ok {
+// 			w.WriteHeader(http.StatusUnauthorized)
+// 			return
+// 		}
+
+// 		ctx := context.WithValue(r.Context(), "appId", appId)
+// 		next.ServeHTTP(w, r.WithContext(ctx))
+// 	})
+// }
+
+// func chkAdminToken(next http.Handler) http.Handler {
+// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// 		tokenString := r.Header.Get("Authorization")
+// 		if tokenString == "" {
+// 			w.WriteHeader(http.StatusUnauthorized)
+// 			return
+// 		}
+
+// 		tokenString = strings.Replace(tokenString, "Bearer ", "", 1)
+
+// 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+// 			return secretKey, nil
+// 		})
+
+// 		if err != nil {
+// 			w.WriteHeader(http.StatusUnauthorized)
+// 			return
+// 		}
+
+// 		if !token.Valid {
+// 			w.WriteHeader(http.StatusUnauthorized)
+// 			return
+// 		}
+
+// 		claims, ok := token.Claims.(jwt.MapClaims)
+// 		if !ok {
+// 			w.WriteHeader(http.StatusUnauthorized)
+// 			return
+// 		}
+
+// 		// name, ok1 := claims["name"].(string)
+// 		// roleCode, ok2 := claims["name"].(string)
+// 		email, ok3 := claims["email"].(string)
+
+// 		if !ok1 || !ok2 || !ok3 {
+// 			w.WriteHeader(http.StatusUnauthorized)
+// 			return
+// 		}
+
+// 		// ctx := context.WithValue(r.Context(), "name", name)
+// 		// ctx = context.WithValue(r.Context(), "roleCode", roleCode)
+// 		ctx := context.WithValue(r.Context(), "email", email)
+
+// 		next.ServeHTTP(w, r.WithContext(ctx))
+// 	})
+// }
+
+func chkToken(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		tokenString := r.Header.Get("Authorization")
+		if tokenString == "" {
+			errMsg(w, errors.New("no token"), http.StatusUnauthorized)
+			return
+		}
+
+		tokenString = strings.Replace(tokenString, "Bearer ", "", 1)
+
+		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+			return secretKey, nil
+		})
+
+		if err != nil {
+			errMsg(w, err, http.StatusUnauthorized)
+			return
+		}
+
+		if !token.Valid {
+			errMsg(w, errors.New("token not valid"), http.StatusUnauthorized)
+			return
+		}
+
+		claims, ok := token.Claims.(jwt.MapClaims)
+		if !ok {
+			errMsg(w, errors.New("claims not valid"), http.StatusUnauthorized)
+			return
+		}
+
+		tokenType := claims["tokenType"].(string)
+
+		if tokenType == "admin" {
+			name, ok1 := claims["name"].(string)
+			roleCode, ok2 := claims["roleCode"].(string)
+			email, ok3 := claims["email"].(string)
+
+			if !ok1 {
+				errMsg(w, errors.New("name in claims not valid"), http.StatusUnauthorized)
+				return
+			}
+
+			if !ok2 {
+				errMsg(w, errors.New("rolecode in claims not valid"), http.StatusUnauthorized)
+				return
+			}
+
+			if !ok3 {
+				errMsg(w, errors.New("email in claims not valid"), http.StatusUnauthorized)
+				return
+			}
+
+			ctx := context.WithValue(r.Context(), "name", name)
+			ctx = context.WithValue(ctx, "roleCode", roleCode)
+			ctx = context.WithValue(ctx, "email", email)
+
+			next.ServeHTTP(w, r.WithContext(ctx))
+
+		} else {
+
+			appId, ok := claims["appId"].(string)
+
+			if !ok {
+				errMsg(w, errors.New("appId in claims not valid"), http.StatusUnauthorized)
+				return
+			}
+
+			ctx := context.WithValue(r.Context(), "appId", appId)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		}
+
+	})
+}
+
+func errMsg(w http.ResponseWriter, err error, status int) {
+	var nokReply NOKReply
+	nokReply.Status = "NOK"
+	nokReply.Errors = err.Error()
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(nokReply)
+
 }
