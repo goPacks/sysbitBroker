@@ -36,6 +36,7 @@ type Lesson struct {
 }
 
 type LessonHeader struct {
+	ModCode    string `json:"modCode"`
 	LessonCode string `json:"lessonCode"`
 	Title      string `json:"title"`
 }
@@ -122,19 +123,24 @@ func GetLesson(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, lessonId 
 
 }
 
-func GetHeaders(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, modCode string) {
+func SyncApp(w http.ResponseWriter, r *http.Request, conn *pgx.Conn) {
 
-	var strLessonCode string
-	var strTitle string
+	fileName := ""
+	fileNames := []string{}
 
-	// 	rows, err := conn.Query("SELECT ename, sal FROM emp order by sal desc")
-	//    if err != nil {
-	//             panic(err)
-	//    }
+	appId, ok := r.Context().Value("appId").(string)
 
-	//	fmt.Println(moduleCode)
+	if !ok {
+		w.WriteHeader(http.StatusInternalServerError)
+		var nokReply NOKReply
+		nokReply.Status = "NOK"
+		nokReply.Errors = "appId not found in SycnApp"
+		json.NewEncoder(w).Encode(nokReply)
+		return
+	}
 
-	rows, err := conn.Query(context.Background(), "select lessonCode, title from lesson where modCode  = $1 order by lessonCode", modCode)
+	rows, err := conn.Query(context.Background(), "select fileName from sync where updatedOn >= (Select lastSync from app where appId  = $1) and substring(fileName,2,4) <= ( select lessonCode from progress where appId = $2 order by lessonCode desc limit 1)", appId, appId)
+
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		var nokReply NOKReply
@@ -146,11 +152,9 @@ func GetHeaders(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, modCode 
 
 	defer rows.Close()
 
-	lessonHeaders := []LessonHeader{}
-
 	for rows.Next() {
 
-		if err := rows.Scan(&strLessonCode, &strTitle); err != nil {
+		if err := rows.Scan(&fileName); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			var nokReply NOKReply
 			nokReply.Status = "NOK"
@@ -159,31 +163,27 @@ func GetHeaders(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, modCode 
 			return
 		}
 
-		lessonHeader := LessonHeader{}
-		lessonHeader.LessonCode = strLessonCode
-		lessonHeader.Title = strTitle
-		lessonHeaders = append(lessonHeaders, lessonHeader)
+		fileNames = append(fileNames, fileName)
 
 	}
 
-	// bytLessonHeaders := []byte(strLessonHeaders)
-	// var jsonLessonHeaders LessonHeaders
+	updAppStmt := "Update app set lastSync = Now() where appId = $1"
 
-	// err := json.Unmarshal(bytLessonHeaders, &lessonHeaders)
-	// if err != nil {
-	// 	fmt.Println("Error:", err)
-	// 	return
-	// }
+	_, err2 := conn.Exec(context.Background(), updAppStmt, appId)
+
+	if checkError(w, err2) {
+		return
+	}
 
 	type OKReply struct {
-		Status        string
-		LessonHeaders []LessonHeader
+		Status    string
+		FileNames []string
 	}
 
 	w.WriteHeader(http.StatusOK)
 	var okReply OKReply
 	okReply.Status = "OK"
-	okReply.LessonHeaders = lessonHeaders
+	okReply.FileNames = fileNames
 	json.NewEncoder(w).Encode(okReply)
 
 }
@@ -271,6 +271,28 @@ func UpdLesson(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, lessonCod
 
 }
 
+func UpdHeader(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, modCode string, lessonCode string) {
+
+	lessonHeader := LessonHeader{}
+
+	json.NewDecoder(r.Body).Decode(&lessonHeader)
+
+	updAppStmt := "Update lesson set modCode = $1, lessonCode = $2, title = $3 where modCode = $4 and lessonCode = $5"
+
+	_, err := conn.Exec(context.Background(), updAppStmt, lessonHeader.ModCode, lessonHeader.LessonCode, lessonHeader.Title, modCode, lessonCode)
+
+	if checkError(w, err) {
+		return
+	}
+
+	var okReply OKReply
+	okReply.Status = "OK"
+	okReply.Message = "Lesson Updated"
+	okReply.Message = fmt.Sprintf("Modular %s : Lesson %s Updated", modCode, lessonCode)
+	json.NewEncoder(w).Encode(okReply)
+
+}
+
 func GetConv(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, appId string) {
 
 	var strNativeLingo, strDeviceOs, strProgress string
@@ -314,17 +336,8 @@ func GetConv(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, appId strin
 }
 
 // Application
+func UpdProgress(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, lessonCode string, result string) {
 
-func UpdAppProgress(w http.ResponseWriter, r *http.Request, conn *pgx.Conn) {
-
-	lesson := Lesson{}
-	lesson.Lesson = "1"
-	lesson.Page = "1"
-	lesson.Page = "0%"
-
-	progress := Progress{
-		Done: []Lesson{},
-	}
 	appId, ok := r.Context().Value("appId").(string)
 
 	if !ok {
@@ -336,11 +349,11 @@ func UpdAppProgress(w http.ResponseWriter, r *http.Request, conn *pgx.Conn) {
 		return
 	}
 
-	json.NewDecoder(r.Body).Decode(&progress)
+	//updAppStmtold := "Update app set lessonCode = $1 where appId = $2"
 
-	updAppStmt := "Update app set progress = $1 where appId = $2"
+	updAppStmt := "insert into progress (appId, lessonCode, result) values ($1, $2, $3) ON CONFLICT(appId, lessonCode) DO UPDATE SET result = EXCLUDED.result"
 
-	_, err := conn.Exec(context.Background(), updAppStmt, progress, appId)
+	_, err := conn.Exec(context.Background(), updAppStmt, appId, lessonCode, result)
 
 	if checkError(w, err) {
 		return
@@ -348,10 +361,48 @@ func UpdAppProgress(w http.ResponseWriter, r *http.Request, conn *pgx.Conn) {
 
 	var okReply OKReply
 	okReply.Status = "OK"
-	okReply.Message = fmt.Sprintf("AppId %s Progress Updated", appId)
+	okReply.Message = fmt.Sprintf("AppId %s Lesson Progress Updated", appId)
 	json.NewEncoder(w).Encode(okReply)
 
 }
+
+// func UpdAppProgress(w http.ResponseWriter, r *http.Request, conn *pgx.Conn) {
+
+// 	lesson := Lesson{}
+// 	lesson.Lesson = "1"
+// 	lesson.Page = "1"
+// 	lesson.Page = "0%"
+
+// 	progress := Progress{
+// 		Done: []Lesson{},
+// 	}
+// 	appId, ok := r.Context().Value("appId").(string)
+
+// 	if !ok {
+// 		w.WriteHeader(http.StatusInternalServerError)
+// 		var nokReply NOKReply
+// 		nokReply.Status = "NOK"
+// 		nokReply.Errors = "appId not found in claims"
+// 		json.NewEncoder(w).Encode(nokReply)
+// 		return
+// 	}
+
+// 	json.NewDecoder(r.Body).Decode(&progress)
+
+// 	updAppStmt := "Update app set progress = $1 where appId = $2"
+
+// 	_, err := conn.Exec(context.Background(), updAppStmt, progress, appId)
+
+// 	if checkError(w, err) {
+// 		return
+// 	}
+
+// 	var okReply OKReply
+// 	okReply.Status = "OK"
+// 	okReply.Message = fmt.Sprintf("AppId %s Progress Updated", appId)
+// 	json.NewEncoder(w).Encode(okReply)
+
+// }
 
 func RegisterApp(w http.ResponseWriter, r *http.Request, conn *pgx.Conn) {
 
@@ -373,11 +424,12 @@ func RegisterApp(w http.ResponseWriter, r *http.Request, conn *pgx.Conn) {
 		Done: []Lesson{},
 	}
 
-	json.NewDecoder(r.Body).Decode(&a)
+	lastSync :=
+		json.NewDecoder(r.Body).Decode(&a)
 
-	insAppStmt := "insert into app (appId, email, active, deviceOs, nativeLingo, pmtLevel, progress) values($1, $2, $3, $4, $5, $6, $7)"
+	insAppStmt := "insert into app (appId, email, active, deviceOs, nativeLingo, pmtLevel, progress, lastSync) values($1, $2, $3, $4, $5, $6, $7, $8)"
 
-	_, err := conn.Exec(context.Background(), insAppStmt, a.AppId, a.Email, "1", a.DeviceOs, a.NativeLingo, 0, progress)
+	_, err := conn.Exec(context.Background(), insAppStmt, a.AppId, a.Email, "1", a.DeviceOs, a.NativeLingo, 0, progress, lastSync)
 
 	if checkError(w, err) {
 		return
@@ -390,10 +442,19 @@ func RegisterApp(w http.ResponseWriter, r *http.Request, conn *pgx.Conn) {
 
 }
 
-func GetAppProgress(w http.ResponseWriter, r *http.Request, conn *pgx.Conn) {
+func GetProgress(w http.ResponseWriter, r *http.Request, conn *pgx.Conn) {
 
-	var strNativeLingo, strDeviceOs, strProgress string
-	var bolActive bool
+	var strLessonCode string
+	var strResult string
+
+	// type Lessons struct {
+	// 	Lesson []Lesson
+	// }
+
+	type Lesson struct {
+		LessonCode string
+		Result     string
+	}
 
 	appId, ok := r.Context().Value("appId").(string)
 
@@ -406,7 +467,8 @@ func GetAppProgress(w http.ResponseWriter, r *http.Request, conn *pgx.Conn) {
 		return
 	}
 
-	if err := conn.QueryRow(context.Background(), "select active, nativeLingo, deviceOs, progress from app where appId = $1", appId).Scan(&bolActive, &strNativeLingo, &strDeviceOs, &strProgress); err != nil {
+	rows, err := conn.Query(context.Background(), "select lessonCode, result from progress where appId  = $1 order by lessonCode", appId)
+	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		var nokReply NOKReply
 		nokReply.Status = "NOK"
@@ -415,30 +477,102 @@ func GetAppProgress(w http.ResponseWriter, r *http.Request, conn *pgx.Conn) {
 		return
 	}
 
-	bytProgress := []byte(strProgress)
-	var jsonProgress Progress
+	defer rows.Close()
 
-	err := json.Unmarshal(bytProgress, &jsonProgress)
-	if err != nil {
-		fmt.Println("Error:", err)
-		return
+	lessons := []Lesson{}
+
+	for rows.Next() {
+
+		if err := rows.Scan(&strLessonCode, &strResult); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			var nokReply NOKReply
+			nokReply.Status = "NOK"
+			nokReply.Errors = err.Error()
+			json.NewEncoder(w).Encode(nokReply)
+			return
+		}
+
+		lesson := Lesson{}
+		lesson.LessonCode = strLessonCode
+		lesson.Result = strResult
+		lessons = append(lessons, lesson)
+
 	}
 
 	type OKReply struct {
-		Status      string
-		Active      bool
-		NativeLingo string
-		DeviceOs    string
-		Progress    Progress
+		Status  string
+		Lessons []Lesson
+	}
+
+	w.WriteHeader(http.StatusOK)
+	var okReply OKReply
+	okReply.Status = "OK1"
+	okReply.Lessons = lessons
+	json.NewEncoder(w).Encode(okReply)
+
+}
+
+func GetHeaders(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, modCode string) {
+	var strLessonCode string
+	var strTitle string
+
+	// 	rows, err := conn.Query("SELECT ename, sal FROM emp order by sal desc")
+	//    if err != nil {
+	//             panic(err)
+	//    }
+
+	//	fmt.Println(moduleCode)
+
+	rows, err := conn.Query(context.Background(), "select lessonCode, title from lesson where modCode  = $1 order by lessonCode", modCode)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		var nokReply NOKReply
+		nokReply.Status = "NOK"
+		nokReply.Errors = err.Error()
+		json.NewEncoder(w).Encode(nokReply)
+		return
+	}
+
+	defer rows.Close()
+
+	lessonHeaders := []LessonHeader{}
+
+	for rows.Next() {
+
+		if err := rows.Scan(&strLessonCode, &strTitle); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			var nokReply NOKReply
+			nokReply.Status = "NOK"
+			nokReply.Errors = err.Error()
+			json.NewEncoder(w).Encode(nokReply)
+			return
+		}
+
+		lessonHeader := LessonHeader{}
+		lessonHeader.LessonCode = strLessonCode
+		lessonHeader.Title = strTitle
+		lessonHeaders = append(lessonHeaders, lessonHeader)
+
+	}
+
+	// bytLessonHeaders := []byte(strLessonHeaders)
+	// var jsonLessonHeaders LessonHeaders
+
+	// err := json.Unmarshal(bytLessonHeaders, &lessonHeaders)
+	// if err != nil {
+	// 	fmt.Println("Error:", err)
+	// 	return
+	// }
+
+	type OKReply struct {
+		Status        string
+		LessonHeaders []LessonHeader
 	}
 
 	w.WriteHeader(http.StatusOK)
 	var okReply OKReply
 	okReply.Status = "OK"
-	okReply.DeviceOs = strDeviceOs
-	okReply.NativeLingo = strNativeLingo
-	okReply.Active = bolActive
-	okReply.Progress = jsonProgress
+	okReply.LessonHeaders = lessonHeaders
 	json.NewEncoder(w).Encode(okReply)
 
 }

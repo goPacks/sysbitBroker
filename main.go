@@ -84,14 +84,18 @@ func main() {
 	tokenRouter := router.PathPrefix("/").Subrouter()
 	tokenRouter.Use(chkToken)
 	tokenRouter.HandleFunc("/getHeaders/{modCode}", getHeaders).Methods("GET")
+	tokenRouter.HandleFunc("/updHeader/{modCode}/{lessonCode}", updHeader).Methods("PUT")
 	tokenRouter.HandleFunc("/getQuiz/{quizCode}", getQuiz).Methods("GET")
 	tokenRouter.HandleFunc("/updQuiz/{quizCode}", updQuiz).Methods("PUT")
 	tokenRouter.HandleFunc("/getLesson/{lessonCode}", getLesson).Methods("GET")
 	tokenRouter.HandleFunc("/updLesson/{lessonCode}", updLesson).Methods("PUT")
 	tokenRouter.HandleFunc("/regApp", regApp).Methods("POST")
-	tokenRouter.HandleFunc("/getAppProgress", getAppProgress).Methods("GET")
-	tokenRouter.HandleFunc("/updAppProgress", updAppProgress).Methods("PUT")
-
+	// tokenRouter.HandleFunc("/getAppProgress", getAppProgress).Methods("GET")
+	// tokenRouter.HandleFunc("/getAppProgress", getAppProgress).Methods("GET")
+	// tokenRouter.HandleFunc("/updAppProgress", updAppProgress).Methods("PUT")
+	tokenRouter.HandleFunc("/syncApp", syncApp).Methods("GET")
+	tokenRouter.HandleFunc("/updProgress/{lessonCode}/{result}", updProgress).Methods("PUT")
+	tokenRouter.HandleFunc("/getProgress", getProgress).Methods("GET")
 	// Create Admin subRouter with Token Authentication
 	// adminRouter := router.PathPrefix("/").Subrouter()
 	// adminRouter.Use(chkAdminToken)
@@ -168,6 +172,11 @@ func getConv(w http.ResponseWriter, r *http.Request) {
 	data.GetConv(w, r, conn, lessonId)
 }
 
+func syncApp(w http.ResponseWriter, r *http.Request) {
+
+	data.SyncApp(w, r, conn)
+}
+
 func getQuiz(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
@@ -218,14 +227,36 @@ func updLesson(w http.ResponseWriter, r *http.Request) {
 	data.UpdLesson(w, r, conn, lessonCode)
 }
 
-func getAppProgress(w http.ResponseWriter, r *http.Request) {
+func updProgress(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/json")
+
+	vars := mux.Vars(r)
+	lessonCode := vars["lessonCode"]
+	result := vars["result"]
+
+	data.UpdProgress(w, r, conn, lessonCode, result)
+}
+
+func updHeader(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Content-Type", "application/json")
+
+	vars := mux.Vars(r)
+	lessonCode := vars["lessonCode"]
+	modCode := vars["modCode"]
+
+	data.UpdHeader(w, r, conn, modCode, lessonCode)
+}
+
+func getProgress(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
 	// vars := mux.Vars(r)
 	// appId := vars["appId"]
 
-	data.GetAppProgress(w, r, conn)
+	data.GetProgress(w, r, conn)
 }
 
 func regApp(w http.ResponseWriter, r *http.Request) {
@@ -234,11 +265,11 @@ func regApp(w http.ResponseWriter, r *http.Request) {
 	data.RegisterApp(w, r, conn)
 }
 
-func updAppProgress(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
+// func updAppProgress(w http.ResponseWriter, r *http.Request) {
+// 	w.Header().Set("Content-Type", "application/json")
 
-	data.UpdAppProgress(w, r, conn)
-}
+// 	data.UpdAppProgress(w, r, conn)
+// }
 
 // func chkAppToken(next http.Handler) http.Handler {
 // 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
