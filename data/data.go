@@ -424,12 +424,12 @@ func RegisterApp(w http.ResponseWriter, r *http.Request, conn *pgx.Conn) {
 	// 	Done: []Lesson{},
 	// }
 
-	lastSync :=
-		json.NewDecoder(r.Body).Decode(&a)
+	//lastSync :=
+	json.NewDecoder(r.Body).Decode(&a)
 
-	insAppStmt := "insert into app (appId, email, active, deviceOs, nativeLingo, pmtLevel, progress, lastSync) values($1, $2, $3, $4, $5, $6, $7)"
+	insAppStmt := "insert into app (appId, email, active, deviceOs, nativeLingo, pmtLevel,  lastSync) values($1, $2, $3, $4, $5, $6, $7)"
 
-	_, err := conn.Exec(context.Background(), insAppStmt, a.AppId, a.Email, "1", a.DeviceOs, a.NativeLingo, 0, lastSync)
+	_, err := conn.Exec(context.Background(), insAppStmt, a.AppId, a.Email, "1", a.DeviceOs, a.NativeLingo, 0, "2024-08-24")
 
 	if checkError(w, err) {
 		return
