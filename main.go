@@ -81,6 +81,7 @@ func main() {
 	router.HandleFunc("/chkApi", chkApi).Methods("GET")
 	router.HandleFunc("/regApp", regApp).Methods("POST")
 
+	// Admin
 	tokenRouter := router.PathPrefix("/").Subrouter()
 	tokenRouter.Use(chkToken)
 	tokenRouter.HandleFunc("/getHeaders/{modCode}", getHeaders).Methods("GET")
@@ -89,30 +90,11 @@ func main() {
 	tokenRouter.HandleFunc("/updQuiz/{quizCode}", updQuiz).Methods("PUT")
 	tokenRouter.HandleFunc("/getLesson/{lessonCode}", getLesson).Methods("GET")
 	tokenRouter.HandleFunc("/updLesson/{lessonCode}", updLesson).Methods("PUT")
-	tokenRouter.HandleFunc("/regApp", regApp).Methods("POST")
-	// tokenRouter.HandleFunc("/getAppProgress", getAppProgress).Methods("GET")
-	// tokenRouter.HandleFunc("/getAppProgress", getAppProgress).Methods("GET")
-	// tokenRouter.HandleFunc("/updAppProgress", updAppProgress).Methods("PUT")
+
+	// App
 	tokenRouter.HandleFunc("/syncApp", syncApp).Methods("GET")
 	tokenRouter.HandleFunc("/updProgress/{lessonCode}/{result}", updProgress).Methods("PUT")
 	tokenRouter.HandleFunc("/getProgress", getProgress).Methods("GET")
-	// Create Admin subRouter with Token Authentication
-	// adminRouter := router.PathPrefix("/").Subrouter()
-	// adminRouter.Use(chkAdminToken)
-	// adminRouter.HandleFunc("/getQuiz/{quizId}", getQuiz).Methods("GET")
-	// adminRouter.HandleFunc("/updQuiz/{quizId}", updQuiz).Methods("PUT")
-	// adminRouter.HandleFunc("/getLesson/{lessonId}", getLesson).Methods("GET")
-	// adminRouter.HandleFunc("/updLesson/{lessonId}", updLesson).Methods("PUT")
-	// //	adminRouter.HandleFunc("/AdminLessonHeaders/{moduleCode}", getLessonHeaders).Methods("GET")
-
-	// //defining authenticated route
-	// appRouter := router.PathPrefix("/").Subrouter()
-	// appRouter.Use(chkAppToken)
-	// // Register the routes on the main router with the auth chkToken
-	// appRouter.HandleFunc("/regApp", regApp).Methods("POST")
-	// appRouter.HandleFunc("/getAppInfo", getAppInfo).Methods("GET")
-	// appRouter.HandleFunc("/updAppInfo", updAppInfo).Methods("PUT")
-	// //	appRouter.HandleFunc("/AppLessonHeaders/{moduleCode}", getLessonHeaders).Methods("GET")
 
 	fmt.Println("Server Listening on port 8899")
 	log.Fatal(http.ListenAndServe(":8899", router))
