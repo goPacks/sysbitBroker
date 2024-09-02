@@ -521,9 +521,9 @@ func GetHeaders(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, modCode 
 	//             panic(err)
 	//    }
 
-	//	fmt.Println(moduleCode)
+	// rows, err := conn.Query(context.Background(), "select lessonCode, title from lesson where modCode  = $1 order by lessonCode", modCode)
+	rows, err := conn.Query(context.Background(), "select lessonCode, title from lesson where substring(lessonCode,1,2)  = $1 order by lessonCode", modCode)
 
-	rows, err := conn.Query(context.Background(), "select lessonCode, title from lesson where modCode  = $1 order by lessonCode", modCode)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		var nokReply NOKReply
