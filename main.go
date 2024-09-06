@@ -2,15 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"strings"
 	"sysbitBroker/auth"
 	"sysbitBroker/data"
-
-	"encoding/json"
-	"errors"
+	"sysbitBroker/errHandler"
 
 	"github.com/golang-jwt/jwt"
 	"github.com/gorilla/mux"
@@ -19,7 +18,7 @@ import (
 )
 
 var (
-	secretKey = []byte("secret-key")
+	secretKey = []byte("keysysbitkey")
 )
 
 type AppId struct {
@@ -49,11 +48,6 @@ type OKReply struct {
 	Message string
 }
 
-type NOKReply struct {
-	Status string
-	Errors string
-}
-
 var (
 	conn *pgx.Conn
 	err  error
@@ -76,20 +70,22 @@ func main() {
 
 	// Create a Router without the Token Authenitcation
 	router := mux.NewRouter()
-	router.HandleFunc("/AppToken", getAppToken).Methods("POST")
-	router.HandleFunc("/AdminToken", getAdminToken).Methods("POST")
+	router.HandleFunc("/AppToken", getAppToken).Methods("GET")
+	router.HandleFunc("/AdminToken", getAdminToken).Methods("GET")
 	router.HandleFunc("/chkApi", chkApi).Methods("GET")
 	router.HandleFunc("/regApp", regApp).Methods("POST")
 
 	// Admin
 	tokenRouter := router.PathPrefix("/").Subrouter()
 	tokenRouter.Use(chkToken)
-	tokenRouter.HandleFunc("/getHeaders/{modCode}", getHeaders).Methods("GET")
-	tokenRouter.HandleFunc("/updHeader/{modCode}/{lessonCode}", updHeader).Methods("PUT")
-	tokenRouter.HandleFunc("/getQuiz/{quizCode}", getQuiz).Methods("GET")
-	tokenRouter.HandleFunc("/updQuiz/{quizCode}", updQuiz).Methods("PUT")
-	tokenRouter.HandleFunc("/getLesson/{lessonCode}", getLesson).Methods("GET")
-	tokenRouter.HandleFunc("/updLesson/{lessonCode}", updLesson).Methods("PUT")
+
+	// Admin
+	tokenRouter.HandleFunc("/getLessonHeaders/{modCode}", getLessonHeaders).Methods("GET")
+	tokenRouter.HandleFunc("/updLessonHeader/{lessonCode}", updLessonHeader).Methods("POST")
+	tokenRouter.HandleFunc("/updQuiz/{quizCode}/{lingoCode}", updQuiz).Methods("POST")
+	tokenRouter.HandleFunc("/updLessonStep/{lessonCode}/{lingoCode}", updLessonStep).Methods("POST")
+	tokenRouter.HandleFunc("/getLessonDetail/{lessonCode}/{lingoCode}", getLessonDetail).Methods("GET")
+	tokenRouter.HandleFunc("/getQuizDetail/{quizCode}/{lingoCode}", getQuizDetail).Methods("GET")
 
 	// App
 	tokenRouter.HandleFunc("/syncApp", syncApp).Methods("GET")
@@ -101,40 +97,7 @@ func main() {
 
 }
 
-// func chkAppToken(h http.Handler) http.Handler {
-// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
-// 		err := auth.ChkAppToken(h, w, r)
-
-// 		if err != nil {
-// 			w.WriteHeader(http.StatusUnauthorized)
-// 			w.Write([]byte(err.Error()))
-// 			return
-// 		}
-
-// 		h.ServeHTTP(w, r)
-// 	})
-// }
-
-// func chkAdminToken(h http.Handler) http.Handler {
-// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
-// 		err := auth.ChkAdminToken(w, r)
-
-// 		if err != nil {
-// 			w.WriteHeader(http.StatusUnauthorized)
-// 			w.Write([]byte(err.Error()))
-// 			return
-// 		}
-
-// 		h.ServeHTTP(w, r)
-// 	})
-// }
-
-func chkApi(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Welcome to the InglesGuru API")
-	fmt.Println("Endpoint Hit: InglesGuru API")
-}
+// Tokens
 
 func getAppToken(w http.ResponseWriter, r *http.Request) {
 	auth.GetAppToken(w, r, conn)
@@ -144,14 +107,11 @@ func getAdminToken(w http.ResponseWriter, r *http.Request) {
 	auth.GetAdminToken(w, r, conn)
 }
 
-func getConv(w http.ResponseWriter, r *http.Request) {
+// APIs
 
-	w.Header().Set("Content-Type", "application/json")
-
-	vars := mux.Vars(r)
-	lessonId := vars["alessonId"]
-
-	data.GetConv(w, r, conn, lessonId)
+func chkApi(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "Welcome to the InglesGuru API")
+	fmt.Println("Endpoint Hit: InglesGuru API")
 }
 
 func syncApp(w http.ResponseWriter, r *http.Request) {
@@ -159,34 +119,34 @@ func syncApp(w http.ResponseWriter, r *http.Request) {
 	data.SyncApp(w, r, conn)
 }
 
-func getQuiz(w http.ResponseWriter, r *http.Request) {
+func getQuizDetail(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
 	vars := mux.Vars(r)
 	quizCode := vars["quizCode"]
-
-	data.GetQuiz(w, r, conn, quizCode)
+	lingoCode := vars["lingoCode"]
+	data.GetQuizDetail(w, r, conn, quizCode, lingoCode)
 }
 
-func getLesson(w http.ResponseWriter, r *http.Request) {
+func getLessonDetail(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
 	vars := mux.Vars(r)
 	lessonCode := vars["lessonCode"]
-
-	data.GetLesson(w, r, conn, lessonCode)
+	lingoCode := vars["lingoCode"]
+	data.GetLessonDetail(w, r, conn, lessonCode, lingoCode)
 }
 
-func getHeaders(w http.ResponseWriter, r *http.Request) {
+func getLessonHeaders(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
 	vars := mux.Vars(r)
 	modCode := vars["modCode"]
 
-	data.GetHeaders(w, r, conn, modCode)
+	data.GetLessonHeaders(w, r, conn, modCode)
 }
 
 func updQuiz(w http.ResponseWriter, r *http.Request) {
@@ -195,18 +155,20 @@ func updQuiz(w http.ResponseWriter, r *http.Request) {
 
 	vars := mux.Vars(r)
 	quizCode := vars["quizCode"]
+	lingoCode := vars["lingoCode"]
 
-	data.UpdQuiz(w, r, conn, quizCode)
+	data.UpdQuiz(w, r, conn, quizCode, lingoCode)
 }
 
-func updLesson(w http.ResponseWriter, r *http.Request) {
+func updLessonStep(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
 	vars := mux.Vars(r)
 	lessonCode := vars["lessonCode"]
+	lingoCode := vars["lingoCode"]
 
-	data.UpdLesson(w, r, conn, lessonCode)
+	data.UpdLessonStep(w, r, conn, lessonCode, lingoCode)
 }
 
 func updProgress(w http.ResponseWriter, r *http.Request) {
@@ -220,7 +182,7 @@ func updProgress(w http.ResponseWriter, r *http.Request) {
 	data.UpdProgress(w, r, conn, lessonCode, result)
 }
 
-func updHeader(w http.ResponseWriter, r *http.Request) {
+func updLessonHeader(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
@@ -228,15 +190,12 @@ func updHeader(w http.ResponseWriter, r *http.Request) {
 	lessonCode := vars["lessonCode"]
 	modCode := vars["modCode"]
 
-	data.UpdHeader(w, r, conn, modCode, lessonCode)
+	data.UpdLessonHeader(w, r, conn, modCode, lessonCode)
 }
 
 func getProgress(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
-
-	// vars := mux.Vars(r)
-	// appId := vars["appId"]
 
 	data.GetProgress(w, r, conn)
 }
@@ -247,106 +206,12 @@ func regApp(w http.ResponseWriter, r *http.Request) {
 	data.RegisterApp(w, r, conn)
 }
 
-// func updAppProgress(w http.ResponseWriter, r *http.Request) {
-// 	w.Header().Set("Content-Type", "application/json")
-
-// 	data.UpdAppProgress(w, r, conn)
-// }
-
-// func chkAppToken(next http.Handler) http.Handler {
-// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-// 		tokenString := r.Header.Get("Authorization")
-// 		if tokenString == "" {
-// 			w.WriteHeader(http.StatusUnauthorized)
-// 			return
-// 		}
-
-// 		tokenString = strings.Replace(tokenString, "Bearer ", "", 1)
-
-// 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-// 			return secretKey, nil
-// 		})
-
-// 		if err != nil {
-// 			w.WriteHeader(http.StatusUnauthorized)
-// 			return
-// 		}
-
-// 		if !token.Valid {
-// 			w.WriteHeader(http.StatusUnauthorized)
-// 			return
-// 		}
-
-// 		claims, ok := token.Claims.(jwt.MapClaims)
-// 		if !ok {
-// 			w.WriteHeader(http.StatusUnauthorized)
-// 			return
-// 		}
-
-// 		appId, ok := claims["appId"].(string)
-// 		if !ok {
-// 			w.WriteHeader(http.StatusUnauthorized)
-// 			return
-// 		}
-
-// 		ctx := context.WithValue(r.Context(), "appId", appId)
-// 		next.ServeHTTP(w, r.WithContext(ctx))
-// 	})
-// }
-
-// func chkAdminToken(next http.Handler) http.Handler {
-// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-// 		tokenString := r.Header.Get("Authorization")
-// 		if tokenString == "" {
-// 			w.WriteHeader(http.StatusUnauthorized)
-// 			return
-// 		}
-
-// 		tokenString = strings.Replace(tokenString, "Bearer ", "", 1)
-
-// 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-// 			return secretKey, nil
-// 		})
-
-// 		if err != nil {
-// 			w.WriteHeader(http.StatusUnauthorized)
-// 			return
-// 		}
-
-// 		if !token.Valid {
-// 			w.WriteHeader(http.StatusUnauthorized)
-// 			return
-// 		}
-
-// 		claims, ok := token.Claims.(jwt.MapClaims)
-// 		if !ok {
-// 			w.WriteHeader(http.StatusUnauthorized)
-// 			return
-// 		}
-
-// 		// name, ok1 := claims["name"].(string)
-// 		// roleCode, ok2 := claims["name"].(string)
-// 		email, ok3 := claims["email"].(string)
-
-// 		if !ok1 || !ok2 || !ok3 {
-// 			w.WriteHeader(http.StatusUnauthorized)
-// 			return
-// 		}
-
-// 		// ctx := context.WithValue(r.Context(), "name", name)
-// 		// ctx = context.WithValue(r.Context(), "roleCode", roleCode)
-// 		ctx := context.WithValue(r.Context(), "email", email)
-
-// 		next.ServeHTTP(w, r.WithContext(ctx))
-// 	})
-// }
-
 func chkToken(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 		tokenString := r.Header.Get("Authorization")
 		if tokenString == "" {
-			errMsg(w, errors.New("no token"), http.StatusUnauthorized)
+			errHandler.ErrMsg(w, errors.New("no token"), http.StatusUnauthorized)
 			return
 		}
 
@@ -357,18 +222,24 @@ func chkToken(next http.Handler) http.Handler {
 		})
 
 		if err != nil {
-			errMsg(w, err, http.StatusUnauthorized)
+
+			if err.Error() == "Token is expired" {
+				errHandler.ErrMsg(w, err, http.StatusForbidden)
+			} else {
+				errHandler.ErrMsg(w, err, http.StatusUnauthorized)
+			}
+
 			return
 		}
 
 		if !token.Valid {
-			errMsg(w, errors.New("token not valid"), http.StatusUnauthorized)
+			errHandler.ErrMsg(w, errors.New("token not valid"), http.StatusUnauthorized)
 			return
 		}
 
 		claims, ok := token.Claims.(jwt.MapClaims)
 		if !ok {
-			errMsg(w, errors.New("claims not valid"), http.StatusUnauthorized)
+			errHandler.ErrMsg(w, errors.New("claims not valid"), http.StatusUnauthorized)
 			return
 		}
 
@@ -380,17 +251,17 @@ func chkToken(next http.Handler) http.Handler {
 			email, ok3 := claims["email"].(string)
 
 			if !ok1 {
-				errMsg(w, errors.New("name in claims not valid"), http.StatusUnauthorized)
+				errHandler.ErrMsg(w, errors.New("name in claims not valid"), http.StatusUnauthorized)
 				return
 			}
 
 			if !ok2 {
-				errMsg(w, errors.New("rolecode in claims not valid"), http.StatusUnauthorized)
+				errHandler.ErrMsg(w, errors.New("rolecode in claims not valid"), http.StatusUnauthorized)
 				return
 			}
 
 			if !ok3 {
-				errMsg(w, errors.New("email in claims not valid"), http.StatusUnauthorized)
+				errHandler.ErrMsg(w, errors.New("email in claims not valid"), http.StatusUnauthorized)
 				return
 			}
 
@@ -405,7 +276,7 @@ func chkToken(next http.Handler) http.Handler {
 			appId, ok := claims["appId"].(string)
 
 			if !ok {
-				errMsg(w, errors.New("appId in claims not valid"), http.StatusUnauthorized)
+				errHandler.ErrMsg(w, errors.New("appId in claims not valid"), http.StatusUnauthorized)
 				return
 			}
 
@@ -414,13 +285,4 @@ func chkToken(next http.Handler) http.Handler {
 		}
 
 	})
-}
-
-func errMsg(w http.ResponseWriter, err error, status int) {
-	var nokReply NOKReply
-	nokReply.Status = "NOK"
-	nokReply.Errors = err.Error()
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(nokReply)
-
 }
