@@ -70,27 +70,27 @@ func main() {
 
 	// Create a Router without the Token Authenitcation
 	router := mux.NewRouter()
-	router.HandleFunc("/AppToken", getAppToken).Methods("GET")
-	router.HandleFunc("/AdminToken", getAdminToken).Methods("GET")
-	router.HandleFunc("/chkApi", chkApi).Methods("GET")
-	router.HandleFunc("/regApp", regApp).Methods("POST")
+	router.HandleFunc("/api/AppToken", getAppToken).Methods("PUT")
+	router.HandleFunc("/api/AdminToken", getAdminToken).Methods("PUT")
+	router.HandleFunc("/api/chkApi", chkApi).Methods("GET")
+	router.HandleFunc("/api/regApp", regApp).Methods("POST")
 
 	// Admin
 	tokenRouter := router.PathPrefix("/").Subrouter()
 	tokenRouter.Use(chkToken)
 
 	// Admin
-	tokenRouter.HandleFunc("/getLessonHeaders/{modCode}", getLessonHeaders).Methods("GET")
-	tokenRouter.HandleFunc("/updLessonHeader/{lessonCode}", updLessonHeader).Methods("POST")
-	tokenRouter.HandleFunc("/updQuiz/{quizCode}/{lingoCode}", updQuiz).Methods("POST")
-	tokenRouter.HandleFunc("/updLessonStep/{lessonCode}/{lingoCode}", updLessonStep).Methods("POST")
-	tokenRouter.HandleFunc("/getLessonDetail/{lessonCode}/{lingoCode}", getLessonDetail).Methods("GET")
-	tokenRouter.HandleFunc("/getQuizDetail/{quizCode}/{lingoCode}", getQuizDetail).Methods("GET")
+	tokenRouter.HandleFunc("/api/getLessonHeaders/{modCode}", getLessonHeaders).Methods("GET")
+	tokenRouter.HandleFunc("/api/updLessonHeader/{lessonCode}", updLessonHeader).Methods("POST")
+	tokenRouter.HandleFunc("/api/updQuiz/{quizCode}/{lingoCode}", updQuiz).Methods("POST")
+	tokenRouter.HandleFunc("/api/updLessonStep/{lessonCode}/{lingoCode}", updLessonStep).Methods("POST")
+	tokenRouter.HandleFunc("/api/getLessonDetail/{lessonCode}/{lingoCode}", getLessonDetail).Methods("GET")
+	tokenRouter.HandleFunc("/api/getQuizDetail/{quizCode}/{lingoCode}", getQuizDetail).Methods("GET")
 
 	// App
-	tokenRouter.HandleFunc("/syncApp", syncApp).Methods("GET")
-	tokenRouter.HandleFunc("/updProgress/{lessonCode}/{result}", updProgress).Methods("PUT")
-	tokenRouter.HandleFunc("/getProgress", getProgress).Methods("GET")
+	tokenRouter.HandleFunc("/api/syncApp", syncApp).Methods("GET")
+	tokenRouter.HandleFunc("/api/updProgress/{lessonCode}/{result}", updProgress).Methods("PUT")
+	tokenRouter.HandleFunc("/api/getProgress", getProgress).Methods("GET")
 
 	fmt.Println("Server Listening on port 8899")
 	log.Fatal(http.ListenAndServe(":8899", router))

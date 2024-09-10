@@ -51,7 +51,7 @@ func GetAppToken(w http.ResponseWriter, r *http.Request, conn *pgx.Conn) {
 	deviceOs := ""
 
 	if err := conn.QueryRow(context.Background(), "select pmtLevel, active, nativeLingo, deviceOs from app where appId = $1 and email = $2", a.AppId, a.Email).Scan(&pmtLevel, &active, &nativeLingo, &deviceOs); err != nil {
-		errHandler.ErrMsg(w, err, http.StatusInternalServerError)
+		errHandler.ErrMsg(w, err, 404)
 		return
 	}
 
@@ -68,7 +68,7 @@ func GetAppToken(w http.ResponseWriter, r *http.Request, conn *pgx.Conn) {
 
 	tokenString, err := createToken(claims)
 	if err != nil {
-		errHandler.ErrMsg(w, err, http.StatusInternalServerError)
+		errHandler.ErrMsg(w, err, 404)
 		return
 
 	}
@@ -94,7 +94,7 @@ func GetAdminToken(w http.ResponseWriter, r *http.Request, conn *pgx.Conn) {
 	roleCode := ""
 
 	if err := conn.QueryRow(context.Background(), "select name, roleCode, email from login where loginCode = $1 and pswd = $2", a.UserId, a.Pswd).Scan(&name, &roleCode, &email); err != nil {
-		errHandler.ErrMsg(w, err, http.StatusInternalServerError)
+		errHandler.ErrMsg(w, err, 404)
 		return
 	}
 
@@ -108,7 +108,7 @@ func GetAdminToken(w http.ResponseWriter, r *http.Request, conn *pgx.Conn) {
 
 	tokenString, err := createToken(claims)
 	if err != nil {
-		errHandler.ErrMsg(w, err, http.StatusInternalServerError)
+		errHandler.ErrMsg(w, err, 404)
 		return
 	}
 
